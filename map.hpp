@@ -10,6 +10,10 @@
 #include "utility.hpp"
 #include "exceptions.hpp"
 
+#include <cassert>//FIXME delete me
+#include <iostream>//FIXME delete me
+using std::cout;
+using std::endl;
 namespace sjtu {
 
     template<
@@ -30,10 +34,11 @@ namespace sjtu {
             node *f, *l, *r;
             value_type *key;
             int h;
-            node(){key = nullptr, h = 1, f = nullptr, l = nullptr, r = nullptr;}
 
-            node(const value_type &key_ , int h_ = 1, node *f_ = nullptr, node *l_ = nullptr, node *r_ = nullptr){
-                key = new value_type(key_),h = h_,f = f_,l = l_,r =r_;
+            node() { key = nullptr, h = 1, f = nullptr, l = nullptr, r = nullptr; }
+
+            node(const value_type &key_, int h_ = 1, node *f_ = nullptr, node *l_ = nullptr, node *r_ = nullptr) {
+                key = new value_type(key_), h = h_, f = f_, l = l_, r = r_;
             }
 
             ~node() { delete key; }
@@ -43,8 +48,29 @@ namespace sjtu {
         size_t num;
         Compare cmp;
 
+        void print_space(int n){
+            while(n--) cout << "\t\t";
+        }
+        void print_node(node* x){
+            static int spaces = 0;
+            if(x == nil)
+                return;
+            ++spaces;
+            print_node(x->l);
+            print_space(spaces - 1), cout << '{'<< x->key->first << ", " << x->key->second << '}' << endl;
+            print_node(x->r);
+            --spaces;
+        }
+
+
         void flush_h(node *&x) {
-            x->h = max(x->l->h, x->r->h) + 1;
+            int hl = x->l->h;
+            int hr = x->r->h;
+            x->h = (hl > hr) ? (hl + 1) : (hr + 1);
+        }
+
+        int bal_deg(node *&x) {
+            return x->l->h - x->r->h;
         }
 
         node *find_key(const Key &key) const {
@@ -144,8 +170,79 @@ namespace sjtu {
             RR(x);
         }
 
-        void balance_insert(node *&x){
+        void insert_private(const value_type &value, node *&x, node *&f) {
+            if (x == nil) {
+                x = new node(value, 1, f, nil, nil);
+            } else if (cmp(value.first, x->key->first)) {
+                insert_private(value, x->l, x);
+                if (bal_deg(x) == 2)
+                    if (cmp(value.first, x->l->key->first))
+                        LL(x);
+                    else LR(x);
+            } else if (cmp(x->key->first, value.first)) {
+                insert_private(value, x->r, x);
+                if (bal_deg(x) == -2)
+                    if (cmp(x->r->key->first, value.first))
+                        RR(x);
+                    else RL(x);
+            }
+            flush_h(x);
+        }
 
+        bool erase_private(const Key &key, node *&x) {
+            if (x == nil) return true;
+            if (cmp(key, x->key->first)) {
+                if (erase_private(key, x->l)) return true;
+                return adjust(x, 0);
+            }
+            if (cmp(x->key->first, key)) {
+                if (erase_private(key, x->r)) return true;
+                return adjust(x, 1);
+            }
+            if (x->l == nil || x->r == nil) {
+                node *oldNode = x;
+                x = (x->l != nil) ? x->l : x->r;
+                delete oldNode;
+                return false;
+            }
+            node *tmp = x->r;
+            while (tmp->l != nil) tmp = tmp->l;
+            x->key = tmp->key;
+            if (erase_private(key, x->r)) return true;
+            return adjust(x, 1);
+        }
+
+
+        bool adjust(node *&x, int subtree) {
+            if (subtree) {
+                int bd = bal_deg(x);
+                if (bd == 1) return true;
+                if (bd == 0) {
+                    --x->h;
+                    return false;
+                }
+                if (bal_deg(x->l) > 0) {
+                    LR(x);
+                    return false;
+                }
+                LL(x);
+                if (bal_deg(x) == 0)return false;
+                return true;
+            } else {
+                int bd = bal_deg(x);
+                if (bd == -1) return true;
+                if (bd == 0) {
+                    --x->h;
+                    return false;
+                }
+                if (bal_deg(x->r) > 0) {
+                    RL(x);
+                    return false;
+                }
+                RR(x);
+                if (bal_deg(x) == 0)return false;
+                return true;
+            }
         }
         /**
          * see BidirectionalIterator at CppReference for help.
@@ -232,7 +329,7 @@ namespace sjtu {
         public:
             const_iterator() : node_ptr(nullptr), map_ptr(nullptr) {}
 
-            const_iterator(node *node_ptr_,const map *map_ptr_) :node_ptr (node_ptr_), map_ptr(map_ptr_) {}
+            const_iterator(node *node_ptr_, const map *map_ptr_) : node_ptr(node_ptr_), map_ptr(map_ptr_) {}
 
             const_iterator(const const_iterator &other) : node_ptr(other.node_ptr), map_ptr(other.map_ptr) {}
 
@@ -270,11 +367,11 @@ namespace sjtu {
             }
 
             bool operator==(const iterator &rhs) const {
-                return node_ptr == rhs.node_ptr;
+                return node_ptr == rhs.node_ptr && map_ptr == rhs.map_ptr;
             }
 
             bool operator==(const const_iterator &rhs) const {
-                return node_ptr == rhs.node_ptr;
+                return node_ptr == rhs.node_ptr && map_ptr == rhs.map_ptr;
             }
 
             bool operator!=(const iterator &rhs) const {
@@ -421,20 +518,9 @@ namespace sjtu {
                 head = get_min(root), ++num;
                 return pair<iterator, bool>(iterator(root, this), true);
             }
-            node *x = root, *f;
-            while (1) {
-                if(x == nil){
-                    x = new node(value, 1,f,nil,nil);
-                    break;
-                }
-                f = x;
-                if (cmp(value.first, x->key->first))
-                    x = x->l;
-                else x = x->r;
-            }
-            balance_insert(x);
-            head = get_min(root), ++num;
-            return pair<iterator, bool>(iterator(x, this), true);
+            insert_private(value, root, nil);
+            head = get_min(root), ++num;//这里是为了保险。head大部分时候可以不用修改。
+            return pair<iterator, bool>(iterator(find_key(value.first), this), true);
         }
 
         /**
@@ -444,7 +530,8 @@ namespace sjtu {
          */
         void erase(iterator pos) {
             if (pos.map_ptr != this || pos.node_ptr == nil) throw invalid_iterator();
-            node *x = pos.node_ptr;
+            erase_private(pos.node_ptr->key->first, root);
+            head = get_min(root), --num;
         }
 
         /**
@@ -469,7 +556,12 @@ namespace sjtu {
         }
 
         const_iterator find(const Key &key) const {
-            return const_iterator(loc(key), this);
+            return const_iterator(find_key(key), this);
+        }
+
+        void print_map(){
+            print_node(root);
+            cout << "num=" << num << endl;
         }
     };
 
