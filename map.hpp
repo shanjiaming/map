@@ -27,13 +27,14 @@ namespace sjtu {
         typedef pair<const Key, T> value_type;
     private:
         struct node {
-            static const
             node *f, *l, *r;
             value_type *key;
             int h;
+            node(){key = nullptr, h = 1, f = nullptr, l = nullptr, r = nullptr;}
 
-            node(const value_type &key_ = nullptr, int h_ = 1, node *f_ = nullptr, node *l_ = nullptr, node *r = nullptr) :
-                    f(f_), l(f_), r(r_), h(h_) { key = new value_type(key_); }
+            node(const value_type &key_ , int h_ = 1, node *f_ = nullptr, node *l_ = nullptr, node *r_ = nullptr){
+                key = new value_type(key_),h = h_,f = f_,l = l_,r =r_;
+            }
 
             ~node() { delete key; }
         };
@@ -64,16 +65,16 @@ namespace sjtu {
 
         void map_copy(const map &other) {
             num = other.num;
-            copy(root, other.root, other.nil);
+            copy(root, nil, other.root, other.nil);
             head = get_min(root);
         }
 
-        void copy(node *&x, node *f node *o_x, node *o_nil) {
+        void copy(node *&x, node *f, node *o_x, node *o_nil) {
             if (o_x == o_nil) {
                 x = nil;
                 return;
             }
-            x = new node(new value_type(*o_x->key), o_x->h, f);
+            x = new node(*new value_type(*o_x->key), o_x->h, f);
             copy(x->l, x, o_x->l, o_nil), copy(x->r, x, o_x->r, o_nil);
         }
 
@@ -141,6 +142,10 @@ namespace sjtu {
         void RL(node *&x) {
             LL(x->r);
             RR(x);
+        }
+
+        void balance_insert(node *&x){
+
         }
         /**
          * see BidirectionalIterator at CppReference for help.
@@ -227,12 +232,7 @@ namespace sjtu {
         public:
             const_iterator() : node_ptr(nullptr), map_ptr(nullptr) {}
 
-            cosnt_iterator(node
-            *node_ptr_,
-            map *map_ptr_
-            ) :
-
-            node_ptr (node_ptr_), map_ptr(map_ptr_) {}
+            const_iterator(node *node_ptr_,const map *map_ptr_) :node_ptr (node_ptr_), map_ptr(map_ptr_) {}
 
             const_iterator(const const_iterator &other) : node_ptr(other.node_ptr), map_ptr(other.map_ptr) {}
 
@@ -418,7 +418,7 @@ namespace sjtu {
             if (pos != nil) return pair<iterator, bool>(iterator(pos, this), false);
             if (empty()) {
                 root = new node(value, 1, nil, nil, nil);
-                head = getmin(root), ++num;
+                head = get_min(root), ++num;
                 return pair<iterator, bool>(iterator(root, this), true);
             }
             node *x = root, *f;
@@ -429,8 +429,8 @@ namespace sjtu {
                 }
                 f = x;
                 if (cmp(value.first, x->key->first))
-                    x = x->lc;
-                else x = x->rc;
+                    x = x->l;
+                else x = x->r;
             }
             balance_insert(x);
             head = get_min(root), ++num;
@@ -442,7 +442,10 @@ namespace sjtu {
          *
          * throw if pos pointed to a bad element (pos == this->end() || pos points an element out of this)
          */
-        void erase(iterator pos) {}
+        void erase(iterator pos) {
+            if (pos.map_ptr != this || pos.node_ptr == nil) throw invalid_iterator();
+            node *x = pos.node_ptr;
+        }
 
         /**
          * Returns the number of elements with key
@@ -452,7 +455,7 @@ namespace sjtu {
          * The default method of check the equivalence is !(a < b || b > a)
          */
         size_t count(const Key &key) const {
-            return loc(key) != nil;
+            return find_key(key) != nil;
         }
 
         /**
